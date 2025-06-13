@@ -262,7 +262,7 @@ start:
             ret
        limpiar_pantalla endp 
        
-        11; subrutina encargada de verificar si un numero es par o impar
+        ; subrutina encargada de verificar si un numero es par o impar
         es_par_impar proc 
              mov dx,offset mensaje ; solicitamos el numero al usuario
              mov ah,09h
@@ -284,7 +284,7 @@ start:
              mov dx,offset es_impar
              mov ah,09h
              int 21h
-             1ret ; retornamos al flujo de la subrutina
+             ; retornamos al flujo de la subrutina
              
              
              esPar: 
