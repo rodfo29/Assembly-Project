@@ -3,16 +3,16 @@
 
 .data
     menu db 13,10,13,10," 1) Determinar si un numero es par o impar",13,10
-         db " 2) Calcular el modulo (dividendo % divisor)",13,10
-         db " 3) Comprobar signo de un numero",13,10
-         db " 4) Verificar si es multiplo de 3 o 5",13,10
-         db " 5) Salir de programa$"
+          db " 2) Calcular el modulo de un numero (dividendo % divisor)",13,10
+          db " 3) Comprobar si un numero es positivo, negativo o cero",13,10
+          db " 4) Verificar si es multiplo de 3 o 5",13,10
+          db " 5) Salir de programa$"
     
     mensaje db 13,10,' Ingrese una opcion del menu: $'
     msg_input_num db 13,10,' Ingrese un numero: $'
     msg_modulo db 13,10,' El modulo es: $'
-    msg_dividendo db 13,10,' Ingrese el dividendo: $'
-    msg_divisor db 13,10,' Ingrese el divisor: $'
+    msg_dividendo db 13,10,' Ingrese el dividendo (0-255): $'
+    msg_divisor db 13,10,' Ingrese el divisor (1-255): $'
     msg_continue db 13,10,' Presione cualquier tecla para continuar...$'
     msg_error_divisor_cero db 13,10,' Error: No se puede dividir por cero!$'
     
@@ -28,17 +28,20 @@
     msg_cero db "El numero es cero.$"
     msg_multiplo3 db "El numero es multiplo de 3.$"
     msg_multiplo5 db "El numero es multiplo de 5.$"
+    msg_multiplo3_y_5 db "El numero es multiplo de 3 y de 5.$"
     msg_no_multiplo db "El numero no es multiplo de 3 ni de 5.$"
     
     mensaje_error db 13,10,"Opcion no valida!",13,10,"$"
     msg_error_numero db "Numero no valido!$"
     
     ; Variables para numeros
-    numero dw ?
-    dividendo dw ?
-    divisor dw ?
-    es_negativo db 0
-    buffer db 6 dup('$')
+    numero DB ?                ; Será interpretado como signed byte (-128 a 127)
+    dividendo db ?
+    divisor db ?
+    modulo_res db ?
+    
+    ; Nueva bandera para el signo en LEER_NUMERO_BYTE
+    es_negativo_flag DB 0      ; 0 = positivo, 1 = negativo
 
 .code
 start:
@@ -55,9 +58,9 @@ main_loop:
     mov ah, 09h
     int 21h
 
-    ; Leer opcion del mein
+    ; Leer opcion del menu
     mov ah, 01h
-    int 21h     
+    int 21h    
     
     ; Procesar opcion
     sub al, '0'
@@ -80,7 +83,7 @@ main_loop:
     call esperar_tecla
     jmp main_loop
 
-primer_menu:      
+primer_menu:    
     call limpiar_pantalla
     mov dx, offset primer_opcion
     mov ah, 09h
@@ -89,9 +92,10 @@ primer_menu:
     mov dx, offset msg_input_num
     mov ah, 09h
     int 21h
-    call leer_numero
-    mov ax, numero
-    call es_par_impar
+    call leer_numero_byte_signed ; LLAMADA A LA NUEVA SUBRUTINA
+    ; El resultado (signed byte) ya está en 'numero'
+    mov al, numero             ; Cargar el número (signed) en AL para es_par_impar
+    call es_par_impar          ; LLAMADA A LA SUBRUTINA es_par_impar (ahora ya maneja signed)
     
     call esperar_tecla
     jmp main_loop
@@ -102,38 +106,44 @@ segundo_menu:
     mov ah, 09h
     int 21h
     
-    ; Leer dividendo
+    ; Leer dividendo (ahora usa la versión unsigned, ya que DIV para bytes no maneja bien números negativos del dividendo si no se hace en 16 bits)
+    ; Para simplificar, asumiremos dividendos y divisores positivos para la operación de módulo.
     mov dx, offset msg_dividendo
     mov ah, 09h
     int 21h
-    call leer_numero
-    mov ax, numero
-    mov dividendo, ax
+    call leer_numero_byte      ; Usar la versión original que lee unsigned 0-255
+    mov al, numero             ; 'numero' ahora contiene el valor unsigned
+    mov dividendo, al
     
-    ; Leer divisor
+    ; Leer divisor (unsigned)
     mov dx, offset msg_divisor
     mov ah, 09h
     int 21h
-    call leer_numero
-    mov ax, numero
-    mov divisor, ax
+    call leer_numero_byte      ; Usar la versión original que lee unsigned 0-255
+    mov al, numero             ; 'numero' ahora contiene el valor unsigned
+    mov divisor, al
     
-    ; Verificar si divisor es cero
-    cmp ax, 0
+    ; Calcular modulo
+    mov al, dividendo       ; Cargar el numero a dividir en AL
+    mov ah, 0               ; Limpiar AH (AX es el dividendo de 16 bits para DIV de 8 bits)
+    mov cl, divisor         ; Cargar el divisor en CL
+
+    ; Validar que el divisor no sea cero para evitar errores de division por cero
+    cmp cl, 0
     je divisor_cero
-    
-    ; Calcular mod
-    mov ax, dividendo
-    cwd             ; Extender signo de AX a DX
-    idiv divisor    ; AX = cociente, DX = resto
-    
+
+    div cl                  ; Divide AX por CL. Cociente en AL, Resto en AH.
+                            ; El resto es el modulo.
+
+    mov modulo_res, ah      ; Guardar el resto (modulo)
+
     ; Mostrar resultado
     mov dx, offset msg_modulo
     mov ah, 09h
     int 21h
-    
-    mov ax, dx      ; Mover el resto a AX para imprimir
-    call imprimir_numero
+
+    mov al, modulo_res      ; Cargar el modulo en AL
+    call mostrar_numero_byte
     
     call esperar_tecla
     jmp main_loop
@@ -150,9 +160,9 @@ tercer_menu:
     mov dx, offset msg_input_num
     mov ah, 09h
     int 21h
-    call leer_numero
-    mov ax, numero
-    call verificar_signo
+    call leer_numero_byte_signed ; LLAMADA A LA NUEVA SUBRUTINA
+    mov al, numero             ; Cargar el número (signed)
+    call verificar_signo       ; ESTA SUBRUTINA YA DEBERÍA FUNCIONAR CON SIGNED
     
     call esperar_tecla
     jmp main_loop
@@ -162,14 +172,14 @@ cuarto_menu:
     mov dx, offset msg_input_num
     mov ah, 09h
     int 21h
-    call leer_numero
-    mov ax, numero
-    call verificar_multiplo
+    call leer_numero_byte_signed 
+    mov al, numero
+    call verificar_multiplo    
     
     call esperar_tecla
     jmp main_loop
     
-fin_programa:   
+fin_programa:  
     mov ah, 4ch
     int 21h
 
@@ -189,86 +199,248 @@ limpiar_pantalla proc
     ret
 limpiar_pantalla endp 
 
-leer_numero proc
-    push bx
-    push cx
-    push si
+; --- NUEVA Subrutina LEER_NUMERO_BYTE_SIGNED ---
+; Lee un numero con posible signo negativo al inicio, lo convierte a un valor binario de 8 bits signed en la variable 'numero'.
+; Rango de entrada efectivo para decimal: -128 a 127
+LEER_NUMERO_BYTE_SIGNED PROC
+    PUSH BX
+    PUSH CX
+    PUSH DX
+    PUSH SI                     ; Para guardar el signo temporalmente
+
+    MOV es_negativo_flag, 0     ; Por defecto, positivo
+    MOV BL, 0                   ; BL = Acumulador del numero (valor absoluto temporal)
+    MOV CX, 0                   ; CX = Contador de digitos leidos
+
+    ; Leer el primer caracter para verificar el signo
+    MOV AH, 01H
+    INT 21H                     ; AL = caracter ASCII leido
+
+    CMP AL, '-'                 ; Es un signo menos?
+    JNE check_first_digit       ; Si no, es un digito o ENTER
     
-    ; Leer cadena
-    mov dx, offset buffer
-    mov ah, 0Ah
-    int 21h
+    ; Es un signo menos
+    MOV es_negativo_flag, 1     ; Marcar como negativo
+    ; Ahora leer el siguiente caracter (primer digito real)
+    MOV AH, 01H
+    INT 21H                     ; AL = primer digito
+
+check_first_digit:
+    CMP AL, 0DH                 ; Es ENTER? (Si se ingresó solo '-' y ENTER, se toma como 0)
+    JE end_read_signed_num      ; Si es ENTER, terminar la lectura
+
+    ; Validar si es un digito numerico '0' a '9'
+    CMP AL, '0'
+    JL read_loop_signed         ; Si es menor que '0', ignorar (o tratar como error)
+    CMP AL, '9'
+    JG read_loop_signed         ; Si es mayor que '9', ignorar
+
+    ; Procesar el primer digito
+    SUB AL, '0'
+    MOV BL, AL                  ; Primer digito a BL (acumulador)
+    INC CX                      ; Incrementar contador de digitos
+    JMP read_loop_signed        ; Continuar leyendo
+
+read_loop_signed:
+    MOV AH, 01H                 ; Leer siguiente caracter
+    INT 21H                     ; AL = caracter ASCII leido
+
+    CMP AL, 0DH                 ; Es ENTER?
+    JE end_read_signed_num      ; Si es ENTER, terminar la lectura
+
+    ; Validar si es un digito numerico '0' a '9'
+    CMP AL, '0'
+    JL read_loop_signed         ; Ignorar
+    CMP AL, '9'
+    JG read_loop_signed         ; Ignorar
+
+    ; Si es un digito valido y no hemos excedido los 3 digitos (para evitar overflow en byte)
+    CMP CX, 3
+    JGE read_loop_signed        ; Si ya leimos 3, ignorar mas digitos (solo se puede hasta 127 para positivo, 255 para unsigned)
+
+    SUB AL, '0'                 ; Convertir ASCII a binario
+    MOV BH, AL                  ; Guardar el digito actual en BH
+
+    ; Multiplicar acumulador actual (BL) por 10
+    MOV DL, 10
+    MOV AL, BL                  ; Mover BL a AL para MUL
+    MUL DL                      ; AX = BL * 10 (AH es 0, no importa aqui)
+    MOV BL, AL                  ; Guardar el resultado parcial de vuelta en BL
+
+    ADD BL, BH                  ; Sumar el nuevo digito
+    INC CX
+    JMP read_loop_signed
+
+end_read_signed_num:
+    MOV AL, BL                  ; Mover el número absoluto acumulado a AL
+
+    CMP es_negativo_flag, 1     ; Es negativo?
+    JNE store_positive_signed   ; Si no, guardar como positivo
+
+    NEG AL                      ; Si es negativo, aplicar complemento a 2 (AL = -AL)
+
+store_positive_signed:
+    MOV numero, AL              ; Guardar el resultado (signed) en la variable 'numero'
+
+    POP SI
+    POP DX
+    POP CX
+    POP BX
+    RET
+LEER_NUMERO_BYTE_SIGNED ENDP
+
+; Subrutina LEER_NUMERO_BYTE (Original, para casos donde se necesita unsigned 0-255)
+; Es importante mantenerla si quieres que la opción 2 (módulo) siga esperando un rango de 0-255.
+LEER_NUMERO_BYTE PROC
+    PUSH BX                 
+    PUSH CX                 
+    PUSH DX                 
     
-    ; Convertir a num
-    mov si, offset buffer + 2
-    mov ax, 0
-    mov es_negativo, 0
-    mov cx, 10
+    MOV BL, 0               
+    MOV CX, 0               
+
+read_loop:
+    MOV AH, 01H             
+    INT 21H                 
+
+    CMP AL, 0DH             
+    JE end_read_num         
+
+    CMP AL, '0'
+    JL read_loop            
+    CMP AL, '9'
+    JG read_loop            
+
+    CMP CX, 3               
+    JGE read_loop           
+
+    SUB AL, '0'             
+
+    MOV DL, 10              
+    MOV AH, 0               
+    MOV BH, AL              
+    MOV AL, BL              
+    MUL DL                  
+    MOV BL, AL              
+
+    ADD BL, BH              
     
-    ; Verificar signo
-    mov bl, [si]
-    cmp bl, '-'
-    jne convertir_loop
-    mov es_negativo, 1
-    inc si
-    
-convertir_loop:
-    mov bl, [si]
-    cmp bl, 0Dh
-    je fin_conversion
-    
-    ; Validar dijito
-    cmp bl, '0'
-    jb error_numero
-    cmp bl, '9'
-    ja error_numero
-    
-    sub bl, '0'
-    imul cx         ; AX = AX * 10
-    add ax, bx
-    inc si
-    jmp convertir_loop
-    
-error_numero:
-    mov dx, offset msg_error_numero
-    mov ah, 09h
-    int 21h
-    mov ax, 0
-    jmp fin_conversion
-            
-fin_conversion:
-    cmp es_negativo, 1
-    jne guardar_numero
-    neg ax
-        
-guardar_numero:
-    mov numero, ax
-    pop si
-    pop cx
-    pop bx
-    ret
-leer_numero endp
+    INC CX                  
+    JMP read_loop           
+
+end_read_num:
+    MOV numero, BL          
+    POP DX                  
+    POP CX                  
+    POP BX                  
+    RET                     
+LEER_NUMERO_BYTE ENDP
+
+; Subrutina MOSTRAR_NUMERO_BYTE (Modificada para mostrar negativos)
+MOSTRAR_NUMERO_BYTE PROC
+    PUSH AX                 
+    PUSH BX                 
+    PUSH CX                 
+    PUSH DX                 
+
+    CMP AL, 0               
+    JE print_zero           
+
+    ; --- Manejo de signo para numeros negativos ---
+    CMP AL, 80h             ; Comprobar si el bit más significativo está encendido (negativo)
+    JL process_positive_display ; Si no, es positivo (o 0, que ya fue manejado)
+
+    ; Si es negativo
+    MOV DL, '-'             ; Mostrar el signo menos
+    MOV AH, 02h
+    INT 21h
+    NEG AL                  ; Convertir el número a su valor absoluto para la división
+
+process_positive_display:
+    MOV CX, 0               ; CX = Contador de digitos para la pila
+    MOV BL, 10              ; Divisor para convertir a decimal
+
+divide_loop:
+    MOV AH, 0               ; Limpiar AH para DIV (dividendo de 16 bits en AX)
+    DIV BL                  ; Divide AX por BL. Cociente en AL, Resto en AH.
+    ADD AH, 30H             ; Convertir el resto (digito) a ASCII
+    PUSH AX                 ; PUSH AX para guardar AH (digito ASCII) y AL (cociente)
+    INC CX                  ; Incrementar el contador de digitos
+    CMP AL, 0               ; Es el cociente cero?
+    JNE divide_loop         ; Si no, seguir dividiendo
+
+print_digits_from_stack:
+    POP AX                  ; Recuperar el digito (en AH) y el cociente (en AL)
+    MOV DL, AH              ; Mover el digito ASCII a DL para mostrar
+    MOV AH, 02H             ; Funcion DOS para mostrar un caracter
+    INT 21H                 ; Mostrar el caracter
+    LOOP print_digits_from_stack 
+                                 
+    JMP end_show_num        
+
+print_zero:
+    MOV DL, '0'             ; ASCII para '0'
+    MOV AH, 02H             ; Funcion DOS para mostrar un caracter
+    INT 21H
+
+end_show_num:
+    POP DX                  
+    POP CX                  
+    POP BX                  
+    POP AX                  
+    RET                     
+MOSTRAR_NUMERO_BYTE ENDP
 
 es_par_impar proc 
-    test ax, 1
-    jz mostrar_par
+    
+    ; en un contexto donde AL debe mantener su valor original después del retorno.
+    ; Sin embargo, si AL solo se usa aquí y su valor no es importante para el caller,
+    ; los PUSH/POP pueden ser omitidos por eficiencia, pero es buena práctica.
+    PUSH AX 
+    
+    ; La paridad se determina por el valor absoluto.
+    ; Si 'AL' contiene el valor directamente pasado, es lo que usaremos.
+    ; Asumimos que AL ya contiene el número a verificar.
+    
+    CMP AL, 0
+    JL  handle_negative_parity_check ; Si es negativo, lo convertimos a positivo para la prueba
+    
+    ; Si es positivo o cero, el test es directo
+    test al, 1
+    jz mostrar_par_msg
     
     mov dx, offset es_impar
     mov ah, 09h
     int 21h
-    ret
-      
-mostrar_par: 
+    JMP end_parity_check
+    
+handle_negative_parity_check:
+    NEG AL                      ; Convertir a valor absoluto 
+    test al, 1
+    jz mostrar_par_msg
+    
+    mov dx, offset es_impar
+    mov ah, 09h
+    int 21h
+    JMP end_parity_check
+    
+mostrar_par_msg: ; Renombrado para claridad
     mov dx, offset es_par
     mov ah, 09h
     int 21h
+    
+end_parity_check:
+    POP AX ; Restaurar AX
     ret
-es_par_impar endp    
+es_par_impar endp   
 
 verificar_signo proc
-    cmp ax, 0
-    jg positivo
-    jl negativo
+    ; PUSH/POP AX no es necesario aqui si AL es el valor de entrada y no se espera preservar su original.
+    ; La subrutina solo usa AL para la comparacion y luego llama a int 21h para mostrar mensajes.
+    
+    CMP AL, 0
+    JG positivo
+    JL negativo
     
     mov dx, offset msg_cero
     mov ah, 09h
@@ -288,89 +460,89 @@ negativo:
     ret
 verificar_signo endp
 
+; --- verificar_multiplo ---
 verificar_multiplo proc
-    mov bx, 3
-    cwd
-    idiv bx
-    cmp dx, 0
-    je es_multiplo3
+    PUSH AX                 
+    PUSH BX
+    PUSH DX
+
+    MOV AL, numero          ; Cargar el numero a verificar
+
     
-    mov ax, numero
-    mov bx, 5
-    cwd
-    idiv bx
-    cmp dx, 0
-    je es_multiplo5
+    CMP AL, 0
+    JE  handle_zero_for_multiple_check ; Si es cero, saltar al manejo de cero
     
+    CMP AL, 0               ; Volvemos a comparar despues del manejo de cero
+    JG  is_positive_for_multiple_check ; Si es positivo, usarlo directamente
+    
+    ; Si es negativo, convertir a positivo (valor absoluto)
+    NEG AL                      
+
+is_positive_for_multiple_check:
+    ; --- PASO 1: Comprobar si es multiplo de 3 ---
+    MOV BL, 3               
+    MOV AH, 0               
+    DIV BL                  
+    CMP AH, 0               
+    JE check_multiplo_5_if_3 
+
+    ; --- PASO 2: Si no es multiplo de 3, comprobar si es multiplo de 5 ---
+    ; Aqui AL ya contiene el valor absoluto si era negativo, o el positivo original.
+    ; No necesitamos recargar 'numero' si su valor absoluto ya esta en AL.
+    MOV BL, 5               
+    MOV AH, 0               
+    DIV BL                  
+    CMP AH, 0               
+    JE es_multiplo5         
+
+    ; --- PASO 3: Si no es múltiplo de 3 ni de 5 ---
     mov dx, offset msg_no_multiplo
     mov ah, 09h
     int 21h
-    ret
-    
-es_multiplo3:
+    JMP end_verificar_multiplo 
+
+check_multiplo_5_if_3:
+    ; --- PASO 1.1: Si es multiplo de 3, ahora comprobar si tambien es multiplo de 5 ---
+
+    MOV BL, 5               
+    MOV AH, 0               
+    DIV BL                  
+    CMP AH, 0               
+    JE es_multiplo3_y_5     
+
+    ; --- PASO 1.2: Si es múltiplo de 3 pero NO de 5 ---
     mov dx, offset msg_multiplo3
     mov ah, 09h
     int 21h
-    ret
+    JMP end_verificar_multiplo 
         
+es_multiplo3_y_5:
+    mov dx, offset msg_multiplo3_y_5 
+    mov ah, 09h
+    int 21h
+    JMP end_verificar_multiplo
+
 es_multiplo5:
     mov dx, offset msg_multiplo5
     mov ah, 09h
     int 21h
+    
+handle_zero_for_multiple_check:
+    ; Cero es multiplo de cualquier numero no nulo.
+    ; Para este contexto, si el requisito es que NO sea 0, entonces:
+    ; Pero si la definicion es que 0 es múltiplo de todo, esto sera diferente.
+    ; Para simplificar, asumiremos que si es 0, no entra en la categoría de "multiplo de 3 o 5"
+    
+    mov dx, offset msg_cero ; Mostrar que es cero
+    mov ah, 09h
+    int 21h
+    
+end_verificar_multiplo:
+    POP DX                  
+    POP BX                  
+    POP AX                  
     ret
 verificar_multiplo endp
-
-imprimir_numero proc
-    push bx
-    push cx
-    push dx
-    
-    ; Manejar caso especial de cero
-    cmp ax, 0
-    jne no_cero
-    mov dl, '0'
-    mov ah, 02h
-    int 21h
-    jmp fin_impresion
-    
-no_cero:
-    ; Manejar signo
-    mov bx, ax
-    or bx, bx
-    jns positivo_imp
-    
-    ; Imprimir signo negativo
-    mov dl, '-'
-    mov ah, 02h
-    int 21h
-    neg bx
-    
-positivo_imp:
-    mov ax, bx
-    mov cx, 0
-    mov bx, 10
-    
-convertir_digitos:
-    xor dx, dx
-    div bx
-    push dx
-    inc cx
-    test ax, ax
-    jnz convertir_digitos
-    
-imprimir_digitos:
-    pop dx
-    add dl, '0'
-    mov ah, 02h
-    int 21h
-    loop imprimir_digitos
-    
-fin_impresion:
-    pop dx
-    pop cx
-    pop bx
-    ret
-imprimir_numero endp
 
 esperar_tecla proc
     mov dx, offset msg_continue
