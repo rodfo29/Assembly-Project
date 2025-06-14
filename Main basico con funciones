@@ -1,0 +1,385 @@
+.model small
+.stack 100h
+
+.data
+    menu db 13,10,13,10," 1) Determinar si un numero es par o impar",13,10
+         db " 2) Calcular el modulo (dividendo % divisor)",13,10
+         db " 3) Comprobar signo de un numero",13,10
+         db " 4) Verificar si es multiplo de 3 o 5",13,10
+         db " 5) Salir de programa$"
+    
+    mensaje db 13,10,' Ingrese una opcion del menu: $'
+    msg_input_num db 13,10,' Ingrese un numero: $'
+    msg_modulo db 13,10,' El modulo es: $'
+    msg_dividendo db 13,10,' Ingrese el dividendo: $'
+    msg_divisor db 13,10,' Ingrese el divisor: $'
+    msg_continue db 13,10,' Presione cualquier tecla para continuar...$'
+    msg_error_divisor_cero db 13,10,' Error: No se puede dividir por cero!$'
+    
+    ; Mensajes de opciones
+    primer_opcion db 13,10,"Determinar si un numero es par o impar",13,10,"$"
+    segunda_opcion db 13,10,"Calcular el modulo de dos numeros",13,10,"$"
+    
+    ; mensajes de resultados
+    es_par db "El numero es par..$"
+    es_impar db "El numero es impar..$"
+    msg_positivo db "El numero es positivo.$"
+    msg_negativo db "El numero es negativo.$"
+    msg_cero db "El numero es cero.$"
+    msg_multiplo3 db "El numero es multiplo de 3.$"
+    msg_multiplo5 db "El numero es multiplo de 5.$"
+    msg_no_multiplo db "El numero no es multiplo de 3 ni de 5.$"
+    
+    mensaje_error db 13,10,"Opcion no valida!",13,10,"$"
+    msg_error_numero db "Numero no valido!$"
+    
+    ; Variables para numeros
+    numero dw ?
+    dividendo dw ?
+    divisor dw ?
+    es_negativo db 0
+    buffer db 6 dup('$')
+
+.code
+start:
+    mov ax, @data
+    mov ds, ax
+    
+main_loop:
+    call limpiar_pantalla
+    mov dx, offset menu
+    mov ah, 09h
+    int 21h
+                                
+    mov dx, offset mensaje
+    mov ah, 09h
+    int 21h
+
+    ; Leer opcion del mein
+    mov ah, 01h
+    int 21h     
+    
+    ; Procesar opcion
+    sub al, '0'
+    
+    cmp al, 1
+    je primer_menu
+    cmp al, 2
+    je segundo_menu
+    cmp al, 3
+    je tercer_menu    
+    cmp al, 4
+    je cuarto_menu
+    cmp al, 5
+    je fin_programa
+                    
+    ; Opcion invalida
+    mov dx, offset mensaje_error
+    mov ah, 09h
+    int 21h
+    call esperar_tecla
+    jmp main_loop
+
+primer_menu:      
+    call limpiar_pantalla
+    mov dx, offset primer_opcion
+    mov ah, 09h
+    int 21h
+    
+    mov dx, offset msg_input_num
+    mov ah, 09h
+    int 21h
+    call leer_numero
+    mov ax, numero
+    call es_par_impar
+    
+    call esperar_tecla
+    jmp main_loop
+
+segundo_menu:    
+    call limpiar_pantalla
+    mov dx, offset segunda_opcion
+    mov ah, 09h
+    int 21h
+    
+    ; Leer dividendo
+    mov dx, offset msg_dividendo
+    mov ah, 09h
+    int 21h
+    call leer_numero
+    mov ax, numero
+    mov dividendo, ax
+    
+    ; Leer divisor
+    mov dx, offset msg_divisor
+    mov ah, 09h
+    int 21h
+    call leer_numero
+    mov ax, numero
+    mov divisor, ax
+    
+    ; Verificar si divisor es cero
+    cmp ax, 0
+    je divisor_cero
+    
+    ; Calcular mod
+    mov ax, dividendo
+    cwd             ; Extender signo de AX a DX
+    idiv divisor    ; AX = cociente, DX = resto
+    
+    ; Mostrar resultado
+    mov dx, offset msg_modulo
+    mov ah, 09h
+    int 21h
+    
+    mov ax, dx      ; Mover el resto a AX para imprimir
+    call imprimir_numero
+    
+    call esperar_tecla
+    jmp main_loop
+    
+    divisor_cero:
+        mov dx, offset msg_error_divisor_cero
+        mov ah, 09h
+        int 21h
+        call esperar_tecla
+        jmp main_loop
+
+tercer_menu:
+    call limpiar_pantalla
+    mov dx, offset msg_input_num
+    mov ah, 09h
+    int 21h
+    call leer_numero
+    mov ax, numero
+    call verificar_signo
+    
+    call esperar_tecla
+    jmp main_loop
+            
+cuarto_menu:
+    call limpiar_pantalla
+    mov dx, offset msg_input_num
+    mov ah, 09h
+    int 21h
+    call leer_numero
+    mov ax, numero
+    call verificar_multiplo
+    
+    call esperar_tecla
+    jmp main_loop
+    
+fin_programa:   
+    mov ah, 4ch
+    int 21h
+
+; ============= Subrutinas =============
+ 
+limpiar_pantalla proc
+    mov ax, 0600h
+    mov bh, 07h
+    mov cx, 0
+    mov dx, 184Fh
+    int 10h
+    
+    mov ah, 02h
+    mov bh, 0
+    mov dx, 0
+    int 10h
+    ret
+limpiar_pantalla endp 
+
+leer_numero proc
+    push bx
+    push cx
+    push si
+    
+    ; Leer cadena
+    mov dx, offset buffer
+    mov ah, 0Ah
+    int 21h
+    
+    ; Convertir a num
+    mov si, offset buffer + 2
+    mov ax, 0
+    mov es_negativo, 0
+    mov cx, 10
+    
+    ; Verificar signo
+    mov bl, [si]
+    cmp bl, '-'
+    jne convertir_loop
+    mov es_negativo, 1
+    inc si
+    
+convertir_loop:
+    mov bl, [si]
+    cmp bl, 0Dh
+    je fin_conversion
+    
+    ; Validar dijito
+    cmp bl, '0'
+    jb error_numero
+    cmp bl, '9'
+    ja error_numero
+    
+    sub bl, '0'
+    imul cx         ; AX = AX * 10
+    add ax, bx
+    inc si
+    jmp convertir_loop
+    
+error_numero:
+    mov dx, offset msg_error_numero
+    mov ah, 09h
+    int 21h
+    mov ax, 0
+    jmp fin_conversion
+            
+fin_conversion:
+    cmp es_negativo, 1
+    jne guardar_numero
+    neg ax
+        
+guardar_numero:
+    mov numero, ax
+    pop si
+    pop cx
+    pop bx
+    ret
+leer_numero endp
+
+es_par_impar proc 
+    test ax, 1
+    jz mostrar_par
+    
+    mov dx, offset es_impar
+    mov ah, 09h
+    int 21h
+    ret
+      
+mostrar_par: 
+    mov dx, offset es_par
+    mov ah, 09h
+    int 21h
+    ret
+es_par_impar endp    
+
+verificar_signo proc
+    cmp ax, 0
+    jg positivo
+    jl negativo
+    
+    mov dx, offset msg_cero
+    mov ah, 09h
+    int 21h
+    ret
+    
+positivo:
+    mov dx, offset msg_positivo
+    mov ah, 09h
+    int 21h
+    ret
+        
+negativo:
+    mov dx, offset msg_negativo
+    mov ah, 09h
+    int 21h
+    ret
+verificar_signo endp
+
+verificar_multiplo proc
+    mov bx, 3
+    cwd
+    idiv bx
+    cmp dx, 0
+    je es_multiplo3
+    
+    mov ax, numero
+    mov bx, 5
+    cwd
+    idiv bx
+    cmp dx, 0
+    je es_multiplo5
+    
+    mov dx, offset msg_no_multiplo
+    mov ah, 09h
+    int 21h
+    ret
+    
+es_multiplo3:
+    mov dx, offset msg_multiplo3
+    mov ah, 09h
+    int 21h
+    ret
+        
+es_multiplo5:
+    mov dx, offset msg_multiplo5
+    mov ah, 09h
+    int 21h
+    ret
+verificar_multiplo endp
+
+imprimir_numero proc
+    push bx
+    push cx
+    push dx
+    
+    ; Manejar caso especial de cero
+    cmp ax, 0
+    jne no_cero
+    mov dl, '0'
+    mov ah, 02h
+    int 21h
+    jmp fin_impresion
+    
+no_cero:
+    ; Manejar signo
+    mov bx, ax
+    or bx, bx
+    jns positivo_imp
+    
+    ; Imprimir signo negativo
+    mov dl, '-'
+    mov ah, 02h
+    int 21h
+    neg bx
+    
+positivo_imp:
+    mov ax, bx
+    mov cx, 0
+    mov bx, 10
+    
+convertir_digitos:
+    xor dx, dx
+    div bx
+    push dx
+    inc cx
+    test ax, ax
+    jnz convertir_digitos
+    
+imprimir_digitos:
+    pop dx
+    add dl, '0'
+    mov ah, 02h
+    int 21h
+    loop imprimir_digitos
+    
+fin_impresion:
+    pop dx
+    pop cx
+    pop bx
+    ret
+imprimir_numero endp
+
+esperar_tecla proc
+    mov dx, offset msg_continue
+    mov ah, 09h
+    int 21h
+    
+    mov ah, 01h
+    int 21h
+    ret
+esperar_tecla endp
+
+end start
